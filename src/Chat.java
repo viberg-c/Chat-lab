@@ -1,10 +1,8 @@
 import javax.swing.*;
-import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -51,6 +49,7 @@ class ChatParticipant implements ObjectStreamListener{
     private ObjectInputStream   myInputStream;
     private ObjectOutputStream  myOutputStream;
     private GUI myGUI;
+    private Socket mySocket;
 
     ChatParticipant (Socket socket) throws IOException {
         myOutputStream  = new ObjectOutputStream(socket.getOutputStream());
@@ -58,6 +57,7 @@ class ChatParticipant implements ObjectStreamListener{
         myInputStream   = new ObjectInputStream(socket.getInputStream());
         myStreamManager = new ObjectStreamManager(1, myInputStream, this);
         myGUI           = new GUI(this);
+        mySocket        = socket;
     }
 
     @Override
@@ -67,10 +67,9 @@ class ChatParticipant implements ObjectStreamListener{
         }
         if (object instanceof String) {
             String message = (String) object;
-            myGUI.addMessageToTextArea(message);
+            myGUI.addMessageToTextArea("Den andra skrev: " + message);
         }
     }
-
     public void sendObject(Object object){
         try {
             myOutputStream.writeObject(object);
@@ -79,10 +78,32 @@ class ChatParticipant implements ObjectStreamListener{
             System.err.println("Kunde inte skicka meddelande");
         }
     }
+    public void doExitButtonEvent() {
+        try {
+            if (myStreamManager != null) {
+                myStreamManager.closeManager();
+            }
+            if (myOutputStream != null) {
+                myOutputStream.close();
+            }
+            if (mySocket != null) {
+                mySocket.close();
+            }
+            System.out.println("Allt stängdes ok!");
+
+        } catch (IOException e) {
+            System.err.println("Något gick fel vid stängning" + e.getMessage());
+        } finally {
+            myGUI.shutDownWindow();
+        }
+    }
+
+
 }
 
 class GUI{
     private JButton    sendButton = new JButton ("Send");
+    private JButton    exitButton = new JButton ("Exit chat");
     private JFrame     frame      = new JFrame ("Beautiful Chat Window");
     private JTextField textField  = new JTextField();
     private JTextArea  textArea   = new JTextArea();
@@ -94,26 +115,34 @@ class GUI{
 
     public GUI(ChatParticipant participant){
         this.participant = participant;
-        handleButtonPress();
+        handleSendButtonEvent();
+        handleExitButtonEvent();
         showGUI();
     }
-
-    private void handleButtonPress(){
+    private void handleSendButtonEvent(){
         sendButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                doButtonEvent();
+                doSendButtonEvent();
             }
         });
     }
-    private void doButtonEvent() {
+    private void handleExitButtonEvent(){
+        exitButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                participant.doExitButtonEvent();
+            }
+        });
+    }
+    private void doSendButtonEvent() {
         String text = textField.getText();
         boolean isEmpty = text.isEmpty();
 
         if (!isEmpty){
             participant.sendObject(text);
             textField.setText("");
-            addMessageToTextArea(text);
+            addMessageToTextArea("Jag: " + text);
         }
     }
     public void addMessageToTextArea(String msg) {
@@ -135,11 +164,14 @@ class GUI{
 
         frame.setPreferredSize(new Dimension(FRAME_WIDTH, FRAME_HEIGHT));
 
+        frame.add(exitButton, BorderLayout.NORTH);
         frame.add(fieldAndButtonContainer, BorderLayout.SOUTH);
         frame.add(scrollTextArea, BorderLayout.CENTER);
     }
+    public void shutDownWindow(){
+        frame.dispose();
+    }
 }
-
 
 
 
